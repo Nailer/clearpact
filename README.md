@@ -40,9 +40,17 @@ dashboard/   Next.js live view of escrows, verdicts & reputation
 CLAUDE.md    project source of truth: plan, decisions, session log
 ```
 
+## Live on Arc testnet
+
+| | |
+|---|---|
+| **ClearPactEscrow** | [`0x696c726845b1a1192b7f5b86394dfda304d1062f`](https://testnet.arcscan.app/address/0x696c726845b1a1192b7f5b86394dfda304d1062f) (chain 5042002) |
+| Proof it works | Job #0: 0.5 USDC escrowed → delivered → verified 95/100 → auto-released to worker. Create tx: [`0x06b4…dd16`](https://testnet.arcscan.app/tx/0x06b4e73cac3e2f12821675a0b0179c201b451ca82e7e5fe4beef2370597bdd16) |
+| Tests | 21/21 passing (`cd contracts && forge test`) |
+
 ## Status
 
-🔨 Hackathon build in progress — see [CLAUDE.md](CLAUDE.md) for the live build plan, decisions log, and roadmap.
+🔨 Hackathon build in progress — see [CLAUDE.md](CLAUDE.md) for the live build plan and [docs/BUILDLOG.md](docs/BUILDLOG.md) for the full technical journal.
 
 ## Team
 
