@@ -12,7 +12,7 @@ Tracks: DeFi (conditional payments, multi-step settlement, onchain automation) +
 
 ## Checkpoint 2 — progress summary (due Sun 26 Jul, AoE)
 
-**Repo:** <GITHUB_REPO_URL>
+**Repo:** https://github.com/Nailer/clearpact
 
 **Progress since Checkpoint 1:**
 - Completed market research: analyzed HackMoney 2026 Arc-track results (97% of submissions were agent-payment apps; none built the trust layer under them) and industry data on agentic-payment blockers — locked our positioning as infrastructure, not another payment bot.
