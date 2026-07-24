@@ -72,3 +72,42 @@
 Three independent wallets, four transactions, end-to-end conditional settlement in seconds — sub-second finality means an agent needn't "wait for confirmations" before acting on payment.
 
 **Next (Part 3):** staking + reputation — worker bonds, slashing on lost disputes, on-chain reputation registry.
+
+---
+
+## Part 3 — Staking, slashing & on-chain reputation (25 Jul 2026)
+
+**Objective:** turn the escrow into a credit system — skin in the game for workers, a slashable bond for buyers' protection, and a deterministic on-chain credit score.
+
+**New contract (`contracts/src/ReputationRegistry.sol`):**
+- Native-USDC bonds: `stake()` / `unstake()`; per-job locking so one bond can't back two jobs at once.
+- Escrow-only hooks (owner-authorized): `lockStake`, `unlockStake`, `slash(agent, amount, beneficiary)`, `recordOutcome`, `recordDisputeLoss`.
+- **Deterministic reputation (0–100), no oracle:** newcomers = 50 neutral; base = (avg verifier score + pass rate) / 2; −10 per lost dispute (capped −40). Fully recomputable from events.
+
+**Escrow v2 integration:**
+- `createJob` gains `minWorkerStake`: buyers price counterparty risk per job.
+- `deliver()` locks the bond — **"no bond, no work"** (reverts if underbonded).
+- Every terminal path unlocks the bond and records the outcome; `arbitrate(jobId, workerBps, slashBps)` seizes the ruled share of the bond for the buyer and records a dispute loss when the worker gets <50% of the ruling.
+- Gotcha: richer `Job` struct hit solc's stack limit → enabled `via_ir` compilation.
+
+**Tests:** 34/34 (21 lifecycle + 13 staking/reputation), incl. a two-dimension fuzz proving `escrow + bond` are fully conserved across any arbitration ruling × slash ratio.
+
+**Deployment (Arc testnet):**
+
+| Contract | Address |
+|----------|---------|
+| ReputationRegistry | [`0x3c639b6C061F4C14dbac60E0C48010Ef7888B1Ec`](https://testnet.arcscan.app/address/0x3c639b6C061F4C14dbac60E0C48010Ef7888B1Ec) |
+| ClearPactEscrow v2 | [`0xDbd9976d55987c956DBfEcad1b98A3Cf00e58b28`](https://testnet.arcscan.app/address/0xDbd9976d55987c956DBfEcad1b98A3Cf00e58b28) |
+
+(v1 escrow `0x696c…062f` superseded; kept on-chain as deployment history.)
+
+**Live two-act demo on Arc testnet (the pitch, on-chain):**
+
+| Act | Steps | Result |
+|-----|-------|--------|
+| 1 — honest work | stake 1 USDC bond (`0xc5fe…537e`) → job0 escrow 0.4 USDC → deliver → verdict **95** → settle | worker paid; reputation **50 → 97** |
+| 2 — fraud caught | job1 escrow 0.4 USDC → junk delivery → verdict **25** → worker disputes → arbiter rules 10%, slashes 50% of bond (`0x6419…5d44d`) | buyer compensated 0.36 + 0.5 USDC bond; reputation **97 → 45**; disputesLost = 1 |
+
+Final on-chain stats for the worker: 2 delivered / 1 passed / 1 dispute lost / 0.4 USDC lifetime earned — readable by any counterparty before hiring.
+
+**Next (Part 4):** the agents — buyer, worker, verifier on Circle Agent Stack (Claude Agent SDK), driving these contracts autonomously.

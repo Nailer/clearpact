@@ -3,8 +3,9 @@ pragma solidity 0.8.26;
 
 import {Script, console} from "forge-std/Script.sol";
 import {ClearPactEscrow} from "../src/ClearPactEscrow.sol";
+import {ReputationRegistry} from "../src/ReputationRegistry.sol";
 
-/// Deploys ClearPactEscrow to Arc testnet.
+/// Deploys the ClearPact protocol (registry + escrow) to Arc testnet.
 /// Usage: forge script script/Deploy.s.sol --rpc-url arc_testnet --broadcast
 contract Deploy is Script {
     function run() external {
@@ -12,11 +13,14 @@ contract Deploy is Script {
         address deployer = vm.addr(pk);
 
         vm.startBroadcast(pk);
-        // MVP: deployer acts as arbiter; Part 3 moves this to staked arbitration.
-        ClearPactEscrow escrow = new ClearPactEscrow(deployer);
+        ReputationRegistry registry = new ReputationRegistry();
+        // MVP: deployer acts as arbiter; later evolves toward staked arbitration.
+        ClearPactEscrow escrow = new ClearPactEscrow(deployer, registry);
+        registry.setEscrow(address(escrow), true);
         vm.stopBroadcast();
 
-        console.log("ClearPactEscrow deployed at:", address(escrow));
+        console.log("ReputationRegistry deployed at:", address(registry));
+        console.log("ClearPactEscrow    deployed at:", address(escrow));
         console.log("Arbiter:", deployer);
     }
 }

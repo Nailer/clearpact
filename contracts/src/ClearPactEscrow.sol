@@ -22,6 +22,14 @@ pragma solidity 0.8.26;
 ///           Verified ──dispute() within window──▶ Disputed ──arbitrate()──▶ Resolved
 ///           Created ──cancelExpired() after deadline──▶ Refunded
 ///           Delivered ──acceptDelivery() by buyer──▶ Released (fast path)
+///
+///         Credit layer (Part 3): jobs may require a worker bond. The bond is
+///         locked in the ReputationRegistry at delivery ("no bond, no work"),
+///         released on settlement, and partially slashed to the buyer when an
+///         arbiter rules against the worker. Every outcome is recorded to the
+///         worker's on-chain track record.
+import {ReputationRegistry} from "./ReputationRegistry.sol";
+
 contract ClearPactEscrow {
     // ─────────────────────────────── Types ────────────────────────────────
 
@@ -50,13 +58,18 @@ contract ClearPactEscrow {
         uint8   score;            // verifier score 0–100
         uint8   passScore;        // minimum score that counts as acceptance
         Status  status;
+        uint96  minWorkerStake;   // bond the worker must lock to deliver
+        uint96  lockedStake;      // bond actually locked for this job
     }
 
     // ─────────────────────────────── State ────────────────────────────────
 
-    /// @notice Arbiter of disputed jobs. MVP: protocol deployer; Part 3+
-    ///         evolves this toward staked arbitration.
+    /// @notice Arbiter of disputed jobs. MVP: protocol deployer; later
+    ///         evolves toward staked arbitration.
     address public immutable arbiter;
+
+    /// @notice Credit layer: bonds, slashing, and agent track records.
+    ReputationRegistry public immutable registry;
 
     uint256 public nextJobId;
     mapping(uint256 => Job) public jobs;
@@ -81,7 +94,9 @@ contract ClearPactEscrow {
     event JobReleased(uint256 indexed jobId, address indexed worker, uint256 amount);
     event JobRefunded(uint256 indexed jobId, address indexed buyer, uint256 amount);
     event JobDisputed(uint256 indexed jobId, address indexed by);
-    event JobArbitrated(uint256 indexed jobId, uint256 workerAmount, uint256 buyerAmount);
+    event JobArbitrated(
+        uint256 indexed jobId, uint256 workerAmount, uint256 buyerAmount, uint256 slashedAmount
+    );
 
     // ─────────────────────────────── Errors ───────────────────────────────
 
@@ -104,21 +119,25 @@ contract ClearPactEscrow {
         _lock = 1;
     }
 
-    constructor(address _arbiter) {
-        if (_arbiter == address(0)) revert ZeroAddress();
+    constructor(address _arbiter, ReputationRegistry _registry) {
+        if (_arbiter == address(0) || address(_registry) == address(0)) revert ZeroAddress();
         arbiter = _arbiter;
+        registry = _registry;
     }
 
     // ─────────────────────────────── Buyer ────────────────────────────────
 
     /// @notice Buyer escrows msg.value (native USDC) for a job.
+    /// @param minWorkerStake bond the worker must have staked in the registry;
+    ///        locked at delivery, slashable on a lost dispute. Zero = no bond.
     function createJob(
         address worker,
         address verifier,
         bytes32 specHash,
         uint8 passScore,
         uint64 deadline,
-        uint32 disputeWindow
+        uint32 disputeWindow,
+        uint96 minWorkerStake
     ) external payable returns (uint256 jobId) {
         if (msg.value == 0 || msg.value > type(uint96).max) revert ZeroAmount();
         if (worker == address(0) || verifier == address(0)) revert ZeroAddress();
@@ -138,7 +157,9 @@ contract ClearPactEscrow {
             verdictAt: 0,
             score: 0,
             passScore: passScore,
-            status: Status.Created
+            status: Status.Created,
+            minWorkerStake: minWorkerStake,
+            lockedStake: 0
         });
 
         emit JobCreated(
@@ -147,10 +168,14 @@ contract ClearPactEscrow {
     }
 
     /// @notice Buyer accepts the delivery directly, skipping verification.
+    ///         Recorded as a perfect-score outcome for the worker.
     function acceptDelivery(uint256 jobId) external nonReentrant {
         Job storage job = jobs[jobId];
         if (job.status != Status.Delivered) revert WrongStatus();
         if (msg.sender != job.buyer) revert NotAuthorized();
+
+        _unlockBond(job);
+        registry.recordOutcome(job.worker, 100, true, job.amount);
         _payout(jobId, job, job.worker, true);
     }
 
@@ -166,12 +191,18 @@ contract ClearPactEscrow {
     // ─────────────────────────────── Worker ───────────────────────────────
 
     /// @notice Worker posts the deliverable hash before the deadline.
+    ///         Locks the required bond: no bond, no work.
     function deliver(uint256 jobId, bytes32 deliverableHash) external {
         Job storage job = jobs[jobId];
         if (job.status != Status.Created) revert WrongStatus();
         if (msg.sender != job.worker) revert NotAuthorized();
         if (block.timestamp > job.deadline) revert DeadlinePassed();
         if (deliverableHash == 0) revert BadParams();
+
+        if (job.minWorkerStake > 0) {
+            registry.lockStake(job.worker, job.minWorkerStake); // reverts if underbonded
+            job.lockedStake = job.minWorkerStake;
+        }
 
         job.deliverableHash = deliverableHash;
         job.status = Status.Delivered;
@@ -204,6 +235,8 @@ contract ClearPactEscrow {
         if (block.timestamp <= uint256(job.verdictAt) + job.disputeWindow) revert DisputeWindowOpen();
 
         bool passed = job.score >= job.passScore;
+        _unlockBond(job);
+        registry.recordOutcome(job.worker, job.score, passed, passed ? job.amount : 0);
         _payout(jobId, job, passed ? job.worker : job.buyer, passed);
     }
 
@@ -218,22 +251,41 @@ contract ClearPactEscrow {
         emit JobDisputed(jobId, msg.sender);
     }
 
-    /// @notice Arbiter splits a disputed escrow between worker and buyer.
+    /// @notice Arbiter splits a disputed escrow between worker and buyer, and
+    ///         may slash part of the worker's bond to compensate the buyer.
+    ///         A ruling with workerBps < 5000 counts as a lost dispute on the
+    ///         worker's record.
     /// @param workerBps share of the escrow paid to the worker, in basis points.
-    function arbitrate(uint256 jobId, uint256 workerBps) external nonReentrant {
+    /// @param slashBps  share of the worker's locked bond seized for the buyer.
+    function arbitrate(uint256 jobId, uint256 workerBps, uint256 slashBps) external nonReentrant {
         Job storage job = jobs[jobId];
         if (job.status != Status.Disputed) revert WrongStatus();
         if (msg.sender != arbiter) revert NotAuthorized();
-        if (workerBps > 10_000) revert BadParams();
+        if (workerBps > 10_000 || slashBps > 10_000) revert BadParams();
 
         uint256 amount = job.amount;
         uint256 workerAmount = (amount * workerBps) / 10_000;
         uint256 buyerAmount = amount - workerAmount;
         job.status = Status.Resolved;
 
+        // Bond: slash the ruled share to the buyer, return the rest.
+        uint256 slashed;
+        uint256 lockedStake = job.lockedStake;
+        if (lockedStake > 0) {
+            slashed = (lockedStake * slashBps) / 10_000;
+            if (slashed > 0) registry.slash(job.worker, slashed, job.buyer);
+            registry.unlockStake(job.worker, lockedStake - slashed);
+            job.lockedStake = 0;
+        }
+
+        // Track record: majority ruling decides pass/loss.
+        bool workerWon = workerBps >= 5_000;
+        if (!workerWon) registry.recordDisputeLoss(job.worker);
+        registry.recordOutcome(job.worker, job.score, workerWon, workerAmount);
+
         if (workerAmount > 0) _send(job.worker, workerAmount);
         if (buyerAmount > 0) _send(job.buyer, buyerAmount);
-        emit JobArbitrated(jobId, workerAmount, buyerAmount);
+        emit JobArbitrated(jobId, workerAmount, buyerAmount, slashed);
     }
 
     // ─────────────────────────────── Views ────────────────────────────────
@@ -243,6 +295,15 @@ contract ClearPactEscrow {
     }
 
     // ────────────────────────────── Internal ──────────────────────────────
+
+    /// @dev Return a job's locked bond to the worker's free stake.
+    function _unlockBond(Job storage job) internal {
+        uint256 lockedStake = job.lockedStake;
+        if (lockedStake > 0) {
+            registry.unlockStake(job.worker, lockedStake);
+            job.lockedStake = 0;
+        }
+    }
 
     function _payout(uint256 jobId, Job storage job, address to, bool released) internal {
         uint256 amount = job.amount;

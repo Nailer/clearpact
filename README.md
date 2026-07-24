@@ -44,9 +44,13 @@ CLAUDE.md    project source of truth: plan, decisions, session log
 
 | | |
 |---|---|
-| **ClearPactEscrow** | [`0x696c726845b1a1192b7f5b86394dfda304d1062f`](https://testnet.arcscan.app/address/0x696c726845b1a1192b7f5b86394dfda304d1062f) (chain 5042002) |
-| Proof it works | Job #0: 0.5 USDC escrowed → delivered → verified 95/100 → auto-released to worker. Create tx: [`0x06b4…dd16`](https://testnet.arcscan.app/tx/0x06b4e73cac3e2f12821675a0b0179c201b451ca82e7e5fe4beef2370597bdd16) |
-| Tests | 21/21 passing (`cd contracts && forge test`) |
+| **ClearPactEscrow** | [`0xDbd9976d55987c956DBfEcad1b98A3Cf00e58b28`](https://testnet.arcscan.app/address/0xDbd9976d55987c956DBfEcad1b98A3Cf00e58b28) (chain 5042002) |
+| **ReputationRegistry** | [`0x3c639b6C061F4C14dbac60E0C48010Ef7888B1Ec`](https://testnet.arcscan.app/address/0x3c639b6C061F4C14dbac60E0C48010Ef7888B1Ec) |
+| Honest work, live | Worker staked a [1 USDC bond](https://testnet.arcscan.app/tx/0xc5fef632b5a49052e9788d2dcb1ff54700b9951a9ce010d2844b776539f7537e), delivered, verified 95/100 → auto-paid; reputation 50 → 97 |
+| Fraud caught, live | Junk delivery verified 25/100 → dispute → [arbitration slashed half the bond](https://testnet.arcscan.app/tx/0x641942512222b7a5915d4d90769fb8a96f5c5adaec6c19f49d3d222ed4c5d44d) to the buyer; reputation 97 → 45 |
+| Tests | 34/34 passing (`cd contracts && forge test`) — incl. fuzzed funds-conservation invariants |
+
+More on-chain evidence (every part's tx hashes) in [docs/BUILDLOG.md](docs/BUILDLOG.md).
 
 ## Status
 

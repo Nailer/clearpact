@@ -3,9 +3,11 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {ClearPactEscrow} from "../src/ClearPactEscrow.sol";
+import {ReputationRegistry} from "../src/ReputationRegistry.sol";
 
 contract ClearPactEscrowTest is Test {
     ClearPactEscrow internal escrow;
+    ReputationRegistry internal registry;
 
     address internal arbiter = makeAddr("arbiter");
     address internal buyer = makeAddr("buyer");
@@ -21,7 +23,9 @@ contract ClearPactEscrowTest is Test {
     bytes32 internal constant VERDICT = keccak256("signed verdict blob");
 
     function setUp() public {
-        escrow = new ClearPactEscrow(arbiter);
+        registry = new ReputationRegistry();
+        escrow = new ClearPactEscrow(arbiter, registry);
+        registry.setEscrow(address(escrow), true);
         vm.deal(buyer, 100 ether);
     }
 
@@ -30,7 +34,7 @@ contract ClearPactEscrowTest is Test {
     function _createJob() internal returns (uint256 jobId) {
         vm.prank(buyer);
         jobId = escrow.createJob{value: AMOUNT}(
-            worker, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW
+            worker, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW, 0
         );
     }
 
@@ -136,7 +140,7 @@ contract ClearPactEscrowTest is Test {
         assertTrue(_status(jobId) == ClearPactEscrow.Status.Disputed);
 
         vm.prank(arbiter);
-        escrow.arbitrate(jobId, 2_500); // 25% to worker
+        escrow.arbitrate(jobId, 2_500, 0); // 25% to worker, no bond staked
 
         assertEq(worker.balance, AMOUNT / 4);
         assertEq(buyer.balance, buyerBefore + (AMOUNT * 3) / 4);
@@ -182,7 +186,7 @@ contract ClearPactEscrowTest is Test {
 
         uint256 buyerBefore = buyer.balance;
         vm.prank(arbiter);
-        escrow.arbitrate(jobId, workerBps);
+        escrow.arbitrate(jobId, workerBps, 0);
 
         assertEq(worker.balance + (buyer.balance - buyerBefore), AMOUNT);
         assertEq(address(escrow).balance, 0);
@@ -213,7 +217,7 @@ contract ClearPactEscrowTest is Test {
         escrow.dispute(jobId);
         vm.prank(buyer);
         vm.expectRevert(ClearPactEscrow.NotAuthorized.selector);
-        escrow.arbitrate(jobId, 0);
+        escrow.arbitrate(jobId, 0, 0);
     }
 
     function test_OnlyBuyer_CanAcceptDelivery() public {
@@ -238,20 +242,20 @@ contract ClearPactEscrowTest is Test {
     function test_CreateJob_RevertsOnZeroValue() public {
         vm.prank(buyer);
         vm.expectRevert(ClearPactEscrow.ZeroAmount.selector);
-        escrow.createJob(worker, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW);
+        escrow.createJob(worker, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW, 0);
     }
 
     function test_CreateJob_RevertsOnPastDeadline() public {
         vm.warp(1000);
         vm.prank(buyer);
         vm.expectRevert(ClearPactEscrow.BadParams.selector);
-        escrow.createJob{value: AMOUNT}(worker, verifier, SPEC, PASS_SCORE, uint64(999), WINDOW);
+        escrow.createJob{value: AMOUNT}(worker, verifier, SPEC, PASS_SCORE, uint64(999), WINDOW, 0);
     }
 
     function test_CreateJob_RevertsOnSelfDealing() public {
         vm.prank(buyer);
         vm.expectRevert(ClearPactEscrow.BadParams.selector);
-        escrow.createJob{value: AMOUNT}(buyer, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW);
+        escrow.createJob{value: AMOUNT}(buyer, verifier, SPEC, PASS_SCORE, uint64(block.timestamp + 1 days), WINDOW, 0);
     }
 
     function test_VerdictScore_CappedAt100() public {
