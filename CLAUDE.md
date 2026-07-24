@@ -68,8 +68,8 @@ Two agents autonomously negotiate a job (e.g., "scrape & summarize X" or "genera
 
 | Part | What we build | Hackathon requirement it ticks | Target date | Status |
 |------|---------------|-------------------------------|-------------|--------|
-| **0** | Repo & Checkpoint 2: git init, README, structure, GitHub push, progress summary | Public repo requirement; Checkpoint 2 (26 Jul) | 24–25 Jul | 🔨 in progress |
-| **1** | Environment: Circle dev account, Arc testnet RPC, testnet USDC, Circle Wallets for 3 agents | Arc, USDC, Circle Wallets | 25–26 Jul | ⬜ |
+| **0** | Repo & Checkpoint 2: git init, README, structure, GitHub push, progress summary | Public repo requirement; Checkpoint 2 (26 Jul) | 24–25 Jul | ✅ code done — GM: GitHub push + platform submission |
+| **1** | Environment: Arc testnet RPC, toolchain, starter kit vendored, deployer wallet, testnet USDC, Circle CLI | Arc, USDC, Circle Wallets | 25–26 Jul | ✅ code done — GM: `circle login`, faucet, Anthropic key |
 | **2** | `ClearPactEscrow.sol`: state machine (Created→Funded→Delivered→Verified→Released / Disputed→…), Foundry tests, deploy to Arc testnet | Conditional payments, multi-step settlement, Circle Contracts | 27–29 Jul | ⬜ |
 | **3** | Reputation & staking: worker bonds, slashing, on-chain reputation registry | Onchain automation; the "credit layer" story | 29–31 Jul | ⬜ |
 | **4** | Agents: buyer, worker, verifier (Agent Stack starter kit, Claude Agent SDK flavor); verifier posts signed verdicts on-chain | Agent Stack, autonomous USDC settlement, decision logic tied to real signals | 1–4 Aug | ⬜ |
@@ -81,12 +81,15 @@ Two agents autonomously negotiate a job (e.g., "scrape & summarize X" or "genera
 
 ### GM task list (things only AJ can do)
 - [ ] Create GitHub repo & push (PM preps everything; or install `gh` CLI + `gh auth login` and PM does it)
-- [ ] Sign up at [Circle developer console](https://console.circle.com/) and get API keys (PM must never handle account creation/passwords)
-- [ ] Edit Checkpoint 1 wording to "clearing & credit layer" framing (PM drafts text)
-- [ ] Submit Checkpoint 2 on the hackathon platform before Sun 26 Jul (repo link + PM-drafted summary)
+- [ ] Run `circle login` in a terminal (email + OTP — the Circle CLI has no API key; creds land in `~/.circle`)
+- [ ] Get an Anthropic API key (console.anthropic.com → Settings → Keys) and paste it into `.env` as `ANTHROPIC_API_KEY` (never into chat)
+- [ ] Fund the deployer wallet with testnet USDC at https://faucet.circle.com → select **Arc Testnet** → address `0x295923C7ecB42Cbf6587b6910616FBd78Bd65b5E`
+- [ ] Edit Checkpoint 1 wording to "clearing & credit layer" framing (drafted in docs/submissions.md)
+- [ ] Submit Checkpoint 2 on the hackathon platform before Sun 26 Jul (repo link + summary from docs/submissions.md)
 - [ ] Later: record/approve 3-min video, submit final before 9 Aug AoE
 
 ## 6. Session log (newest first — every session appends here)
+- **24 Jul 2026 (Claude Code, session 3 — Part 1):** Environment built. Verified Arc testnet live via RPC (`https://rpc.testnet.arc.network`, chain 5042002 ✓, USDC native gas @18 decimals, explorer testnet.arcscan.app, faucet faucet.circle.com). Foundry project scaffolded in `contracts/` (solc 0.8.26, arc_testnet endpoint configured; build + sample tests pass). Vendored Agent Stack starter kit (Apache-2.0) into `agents/` — circle-tools, agent-cli, claude-agent-sdk kit; `bun install` + typecheck all pass. Circle CLI v0.0.6 installed globally. Generated testnet-only deployer wallet `0x2959...5b5E` (key in gitignored `.env`). **Key discoveries:** (1) Circle CLI auth = email+OTP `circle login`, NOT an API key; (2) upstream kit demos pay x402 services on Base mainnet — our agents get repointed to Arc testnet contracts in Part 4 (Nanopayments-on-Arc wiring is Part 5; Circle launched Nanopayments on testnet, needs verification then). Agents also need an ANTHROPIC_API_KEY. **Gate open: Part 1 code done; GM must do auth steps (see GM task list), then approve Part 2 (escrow contract).**
 - **24 Jul 2026 (Claude Code, session 2):** GM gave green light with staged-build process (parts + go-ahead gates). Added §5 build plan (Parts 0–7) with requirement-coverage map and GM task list. **Part 0 executed:** git repo initialized (`main`, first commit), README, .gitignore, `docs/submissions.md` (Checkpoint 1 reword + Checkpoint 2 summary drafts). `gh` CLI not installed → GM must create the GitHub repo and push (commands provided in chat), or install `gh` for PM to do it. Toolchain verified: git 2.46.2, node 24, Foundry 1.3.5. **Gate open: awaiting GM go-ahead for Part 1** (Circle dev account + Arc testnet env + wallets).
 - **24 Jul 2026 (Claude Code):** GM confirmed Checkpoint 1 complete. Discussed idea-saturation risk; locked differentiation strategy (SDK play + Discord integrations, verifier-with-live-slash demo, "clearing & credit layer" positioning). Awaiting GM's explicit green light to scaffold repo/contracts — Checkpoint 2 due 26 Jul.
 - **23 Jul 2026 (Claude Code):** Project kickoff. Researched Arc docs, Agent Stack starter kits, Nanopayments/x402, prior Arc hackathon winners (HackMoney 2026: arctan(x), Text-to-Chain, ArcFlow, Versus; Agentic Economy Apr 2026: Cairn, Sendero, npm-security-x402). Identified trust/dispute/reputation gap. Proposed ClearPact. Created this CLAUDE.md. No code yet; directory empty otherwise.
