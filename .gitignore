@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Env & secrets — never commit keys
+.env
+.env.*
+!.env.example
+*.key
+secrets/
+
+# Build outputs
+dist/
+build/
+out/
+cache/
+artifacts/
+broadcast/
+.next/
+
+# Foundry
+contracts/cache/
+contracts/out/
+
+# Misc
+.DS_Store
+*.log
+coverage/
