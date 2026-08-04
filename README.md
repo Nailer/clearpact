@@ -1,4 +1,4 @@
-# ClearPact ⚖️
+<img src="assets/logo.svg" alt="ClearPact" width="340">
 
 **The trust & settlement layer for the agent economy — escrow, automated verification, disputes, and credit scores for AI agents, settled in USDC on [Arc](https://www.arc.io/).**
 

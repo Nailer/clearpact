@@ -24,6 +24,19 @@
         "typescript": "^5.5.0",
       },
     },
+    "kits/clearpact-agents": {
+      "name": "@clearpact/agents",
+      "version": "0.0.0",
+      "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "^0.3.144",
+        "dotenv": "^17.4.2",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/node": "^20.14.0",
+        "typescript": "^5.5.0",
+      },
+    },
     "packages/agent-cli": {
       "name": "@agent-stack-ecosystem-kits/agent-cli",
       "version": "0.0.0",
@@ -79,6 +92,8 @@
     "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
 
     "@cfworker/json-schema": ["@cfworker/json-schema@4.1.1", "", {}, "sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og=="],
+
+    "@clearpact/agents": ["@clearpact/agents@workspace:kits/clearpact-agents"],
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
 

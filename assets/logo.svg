@@ -1,0 +1,7 @@
+<svg width="680" height="224" viewBox="0 0 680 224" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>ClearPact logo</title>
+<desc>A navy hexagon badge with a teal checkmark, next to the wordmark ClearPact, representing verified trust in agent-to-agent payments.</desc>
+<polygon points="150,40 212.35,76 212.35,148 150,184 87.65,148 87.65,76" fill="#14304D"/>
+<path d="M120,112 L140,132 L185,87" fill="none" stroke="#22C08C" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="250" y="130" font-size="56" font-weight="500" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#14304D">ClearPact</text>
+</svg>
