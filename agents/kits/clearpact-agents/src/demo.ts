@@ -17,14 +17,25 @@ function section(title: string) {
   console.log(`\n${'='.repeat(70)}\n${title}\n${'='.repeat(70)}`);
 }
 
-function findJobId(toolCalls: { tool: string; output: unknown }[]): number {
+type ToolCall = { tool: string; input: unknown; output: unknown };
+
+function findJobId(toolCalls: ToolCall[]): number {
   for (const c of toolCalls) {
-    if (c.tool === 'create_job') {
-      const parsed = JSON.parse(String(c.output));
-      return parsed.jobId;
-    }
+    if (c.tool === 'create_job') return (c.output as { jobId: number }).jobId;
   }
   throw new Error('Agent never called create_job');
+}
+
+function findDisputeWindowSeconds(toolCalls: ToolCall[]): number {
+  for (const c of toolCalls) {
+    if (c.tool === 'create_job') return (c.input as { disputeWindowSeconds: number }).disputeWindowSeconds;
+  }
+  throw new Error('Agent never called create_job');
+}
+
+async function wait(seconds: number) {
+  console.log(`  ...waiting ${seconds}s for the dispute window to close...`);
+  await new Promise((r) => setTimeout(r, seconds * 1000));
 }
 
 async function actOne() {
@@ -35,11 +46,13 @@ async function actOne() {
     `The job: "Write a 3-sentence plain-language explanation of how ClearPact's escrow works, ` +
     `suitable for a non-technical reader. Must mention: (1) funds are locked until work is verified, ` +
     `(2) a verifier agent grades the work, (3) payment is automatic on a passing grade." ` +
-    `Escrow 0.3 USDC. Require a worker bond given this is the worker's first job with you.`;
+    `Escrow 0.3 USDC. Require a worker bond given this is the worker's first job with you. ` +
+    `This is a live demo — use a short dispute window, well under 60 seconds.`;
   const buyerResult = await runBuyer(BUYER, buyerBrief);
   console.log('\n[buyer]', buyerResult.text);
   const jobId = findJobId(buyerResult.toolCalls);
-  console.log(`  → jobId=${jobId}`);
+  const disputeWindow = findDisputeWindowSeconds(buyerResult.toolCalls);
+  console.log(`  → jobId=${jobId}, disputeWindow=${disputeWindow}s`);
 
   const workerBrief =
     `You've been assigned job #${jobId} by a buyer. Fetch nothing else — here is the full job spec: ` +
@@ -61,7 +74,7 @@ async function actOne() {
   const verifierResult = await runVerifier(VERIFIER, verifierBrief);
   console.log('\n[verifier]', verifierResult.text);
 
-  await new Promise((r) => setTimeout(r, 3000));
+  await wait(disputeWindow + 5);
   const settleTx = await chain.settle(BUYER, jobId);
   console.log(`\n[settle] job #${jobId} →`, settleTx);
 
@@ -77,7 +90,8 @@ async function actTwo() {
     `The job: "Write a complete, accurate 5-item bullet list of ClearPact's on-chain guarantees: ` +
     `escrow, verifier-triggered settlement, dispute window, worker bonds, and on-chain reputation. ` +
     `Each bullet must name the guarantee and explain it in one sentence." ` +
-    `Escrow 0.3 USDC. Require a worker bond of 1.0 USDC.`;
+    `Escrow 0.3 USDC. Require a worker bond of 1.0 USDC. ` +
+    `This is a live demo — use a short dispute window, well under 60 seconds.`;
   const buyerResult = await runBuyer(BUYER, buyerBrief);
   console.log('\n[buyer]', buyerResult.text);
   const jobId = findJobId(buyerResult.toolCalls);

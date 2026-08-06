@@ -52,18 +52,40 @@ async function execute(
   return { txHash: raw?.transactionHash ?? raw?.txHash, txId: raw?.transactionId ?? raw?.txId, raw };
 }
 
-/** Read-only ABI call against a ClearPact contract. */
-async function query(contract: `0x${string}`, signature: string, params: (string | number)[] = []): Promise<any> {
-  const args = ['contract', 'query', signature, ...params.map(String), '--contract', contract, '--chain', CHAIN];
-  const raw = await circleJson(args);
-  return raw?.result ?? raw;
+/** Read-only ABI call against a ClearPact contract. Uses `cast call` rather
+ *  than `circle contract query`: the Circle CLI's query command only accepts
+ *  an input-only signature and returns raw undecoded hex (`outputData`),
+ *  whereas `cast call` decodes named return types directly — reliable and
+ *  already proven in Parts 2/3. Reads are not part of the "agents acting
+ *  through Circle Wallets" story (writes are); this only affects how we look
+ *  values up. */
+async function query(contract: `0x${string}`, signature: string, params: (string | number)[] = []): Promise<string> {
+  const rpc = process.env.ARC_TESTNET_RPC!;
+  const { stdout } = await execFileAsync('cast', [
+    'call',
+    contract,
+    signature,
+    ...params.map(String),
+    '--rpc-url',
+    rpc,
+  ]);
+  return stdout.trim();
 }
 
 // ── Escrow — buyer ──────────────────────────────────────────────────────
 
+/** `cast call`'s plain-text output for a numeric return is `<digits>` or
+ *  `<digits> [<scientific-notation>]` for large values — the leading token is
+ *  always the exact decimal value. */
+function parseCastUint(output: string): bigint {
+  const token = output.trim().split(/\s/)[0];
+  if (!token) throw new Error(`cast call returned empty output`);
+  return BigInt(token);
+}
+
 export async function nextJobId(): Promise<number> {
-  const result = await query(ESCROW_ADDRESS, 'nextJobId()');
-  return Number(Array.isArray(result) ? result[0] : result);
+  const result = await query(ESCROW_ADDRESS, 'nextJobId()(uint256)');
+  return Number(parseCastUint(result));
 }
 
 export async function createJob(
@@ -127,14 +149,15 @@ export async function settle(callerWallet: `0x${string}`, jobId: number) {
 }
 
 export async function getJobStatus(jobId: number): Promise<number> {
-  // Job.status is the 12th field of the returned tuple.
+  // Job.status is the 13th field of the returned tuple (0-indexed: 12).
   const result = await query(
     ESCROW_ADDRESS,
     'getJob(uint256)((address,address,address,uint96,bytes32,bytes32,bytes32,uint64,uint32,uint64,uint8,uint8,uint8,uint96,uint96))',
     [jobId],
   );
-  const tuple = Array.isArray(result) ? result : result?.[0];
-  return Number(tuple[12]);
+  // cast prints a tuple as a parenthesized, comma-separated line.
+  const fields = result.replace(/^\(|\)$/g, '').split(', ');
+  return Number(fields[12]);
 }
 
 // ── Reputation registry ──────────────────────────────────────────────────
@@ -145,12 +168,12 @@ export async function stake(workerWallet: `0x${string}`, amountUsdc: string) {
 
 export async function reputationScore(agent: `0x${string}`): Promise<number> {
   const result = await query(REGISTRY_ADDRESS, 'reputationScore(address)(uint256)', [agent]);
-  return Number(Array.isArray(result) ? result[0] : result);
+  return Number(parseCastUint(result));
 }
 
 export async function freeStakeOf(agent: `0x${string}`): Promise<string> {
   const result = await query(REGISTRY_ADDRESS, 'freeStakeOf(address)(uint256)', [agent]);
-  return String(Array.isArray(result) ? result[0] : result);
+  return parseCastUint(result).toString();
 }
 
 // ── Arbitration (protocol admin — raw-signed, see config.ts) ────────────

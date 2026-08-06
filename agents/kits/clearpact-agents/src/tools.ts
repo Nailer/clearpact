@@ -4,7 +4,20 @@ import * as chain from './chain';
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
-function ok(value: unknown): ToolResult {
+/** Side-channel call log: each tool invocation records itself here directly,
+ *  rather than the caller trying to reconstruct tool_use/tool_result pairs
+ *  from the SDK's streamed message shape (fragile — see run.ts history). */
+export type RecordedCall = { tool: string; input: unknown; output: unknown };
+let recorder: RecordedCall[] = [];
+export function resetRecorder(): void {
+  recorder = [];
+}
+export function getRecordedCalls(): RecordedCall[] {
+  return recorder;
+}
+
+function ok(name: string, input: unknown, value: unknown): ToolResult {
+  recorder.push({ tool: name, input, output: value });
   return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 
@@ -20,7 +33,7 @@ const readOnlyTools = [
     { jobId: z.number().int().describe('The job id.') },
     async ({ jobId }): Promise<ToolResult> => {
       try {
-        return ok({ jobId, status: await chain.getJobStatus(jobId) });
+        return ok('get_job_status', { jobId }, { jobId, status: await chain.getJobStatus(jobId) });
       } catch (e) {
         return err(e);
       }
@@ -36,7 +49,7 @@ const readOnlyTools = [
           chain.reputationScore(address as `0x${string}`),
           chain.freeStakeOf(address as `0x${string}`),
         ]);
-        return ok({ address, reputationScore: score, freeStakeWei: freeStake });
+        return ok('get_reputation', { address }, { address, reputationScore: score, freeStakeWei: freeStake });
       } catch (e) {
         return err(e);
       }
@@ -79,7 +92,7 @@ export function buildBuyerServer(buyerWallet: `0x${string}`) {
             input.minWorkerStakeUsdc,
             input.escrowAmountUsdc,
           );
-          return ok({ jobId, specHash, ...tx });
+          return ok('create_job', input, { jobId, specHash, ...tx });
         } catch (e) {
           return err(e);
         }
@@ -91,7 +104,7 @@ export function buildBuyerServer(buyerWallet: `0x${string}`) {
       { jobId: z.number().int() },
       async ({ jobId }): Promise<ToolResult> => {
         try {
-          return ok(await chain.disputeJob(buyerWallet, jobId));
+          return ok('dispute_job', { jobId }, await chain.disputeJob(buyerWallet, jobId));
         } catch (e) {
           return err(e);
         }
@@ -111,7 +124,7 @@ export function buildWorkerServer(workerWallet: `0x${string}`) {
       { amountUsdc: z.string().describe('Amount to stake, e.g. "1.0".') },
       async ({ amountUsdc }): Promise<ToolResult> => {
         try {
-          return ok(await chain.stake(workerWallet, amountUsdc));
+          return ok('stake_bond', { amountUsdc }, await chain.stake(workerWallet, amountUsdc));
         } catch (e) {
           return err(e);
         }
@@ -128,7 +141,7 @@ export function buildWorkerServer(workerWallet: `0x${string}`) {
         try {
           const hash = await chain.keccak256Of(deliverableText);
           const tx = await chain.deliver(workerWallet, jobId, hash);
-          return ok({ jobId, deliverableHash: hash, ...tx });
+          return ok('deliver_work', { jobId, deliverableText }, { jobId, deliverableHash: hash, ...tx });
         } catch (e) {
           return err(e);
         }
@@ -140,7 +153,7 @@ export function buildWorkerServer(workerWallet: `0x${string}`) {
       { jobId: z.number().int() },
       async ({ jobId }): Promise<ToolResult> => {
         try {
-          return ok(await chain.disputeJob(workerWallet, jobId));
+          return ok('dispute_job', { jobId }, await chain.disputeJob(workerWallet, jobId));
         } catch (e) {
           return err(e);
         }
@@ -169,7 +182,7 @@ export function buildVerifierServer(verifierWallet: `0x${string}`) {
         try {
           const hash = await chain.keccak256Of(verdictRationale);
           const tx = await chain.submitVerdict(verifierWallet, jobId, score, hash);
-          return ok({ jobId, score, verdictHash: hash, ...tx });
+          return ok('submit_verdict', { jobId, score, verdictRationale }, { jobId, score, verdictHash: hash, ...tx });
         } catch (e) {
           return err(e);
         }
