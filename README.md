@@ -28,17 +28,29 @@ State machine: `Created → Funded → Delivered → Verified → Released` (or 
 | Contracts | Solidity + Foundry (escrow, staking, reputation) via Circle Contracts |
 | Agents | TypeScript, **Circle Agent Stack** starter kit (Claude Agent SDK), **Circle Wallets** |
 | Micropayments | **Circle Nanopayments** (x402) + **Paymaster** for sponsored gas |
-| Frontend | Next.js dashboard + **App Kits** (Send, Unified Balance) |
+| Frontend | Next.js dashboard (live, client-side, viem) + **App Kit** (real `kit.send()` sponsorship) |
 
 ## Repo layout (planned)
 
 ```
-contracts/   Solidity: ClearPactEscrow, ReputationRegistry
+contracts/   Solidity: ClearPactEscrow, ReputationRegistry, MilestoneEscrow
 agents/      buyer, worker & verifier agents — kits/clearpact-agents (Claude Agent SDK, Circle Wallets)
-sdk/         drop-in TypeScript wrapper: escrow any agent-to-agent payment in one call
-dashboard/   Next.js live view of escrows, verdicts & reputation
+dashboard/   Next.js live view of escrows, milestones, reputation & activity + App Kit
+sdk/         drop-in TypeScript wrapper: escrow any agent-to-agent payment in one call (planned)
 CLAUDE.md    project source of truth: plan, decisions, session log
 ```
+
+## Dashboard
+
+Live, read-only view of every escrow, milestone job, and agent reputation — polled directly from
+Arc testnet in the browser, no backend, no indexer — plus a real Circle App Kit "sponsor an agent"
+panel.
+
+```bash
+cd dashboard && npm install && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). See [dashboard/README.md](dashboard/README.md).
 
 ## Live on Arc testnet
 

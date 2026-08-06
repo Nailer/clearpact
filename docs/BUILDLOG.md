@@ -204,3 +204,23 @@ A fresh, zero-balance Circle wallet (never touched before this run) was hired, f
 **Known scope limit (by choice, not oversight):** `MilestoneEscrow` doesn't yet have a `cancelExpired` equivalent to reclaim an abandoned job's escrow after its deadline (ClearPactEscrow has this). A test job created before the tooling fix (`jobId 1`) sits harmlessly abandoned as a result — its 0.32 USDC stays locked until its deadline passes, no funds at risk, just not reclaimable early. Low priority given the time budget for the remaining parts.
 
 **Next (Part 6):** Next.js dashboard — live escrows, reputations, and money flow — the visual centerpiece for the demo video.
+
+---
+
+## Part 6 — Live dashboard, real on-chain data (6 Aug 2026)
+
+**Objective:** the demo centerpiece — a live, read-only view of every escrow, milestone job, and agent reputation, plus a real Circle App Kit integration, with no backend and no indexer.
+
+**Architecture (`dashboard/`):** Next.js 16 (App Router, Turbopack), client-side data fetching straight from Arc testnet via [viem](https://viem.sh) — no server, no database, no indexer. The browser itself polls all three contracts every 15s via `multicall` (batched into one RPC round-trip) and renders live: total escrowed/released, active jobs, disputes, an agent reputation leaderboard, a combined jobs table (single-payment + expandable milestone jobs), and a decoded event-log activity feed.
+
+**Real bugs found and fixed by testing against live data, not assumed correct:**
+1. **Two different viem decode shapes for "the same kind of thing."** A Solidity function that explicitly returns one `struct`-typed tuple (`getJob`, `getMilestone`) decodes in viem as a named object — but an auto-generated public-mapping getter for a struct (`jobs(uint256)`, `statsOf(address)`) has *multiple top-level outputs* and decodes *positionally as an array* instead, even though both look identical in Solidity source. Milestone jobs rendered with `buyer`/`worker` blank until this was caught and fixed with explicit positional destructuring.
+2. **Arc testnet's public RPC providers cap `eth_getLogs` to a few thousand blocks per call** (dRPC free tier: 10,000) — the activity feed's log scan is chunked into 9,000-block windows and fetched in parallel rather than requested in one call.
+3. **The primary public RPC (`rpc.testnet.arc.network`) rate-limited hard** under this session's sustained dev-tool usage; `rpc.drpc.testnet.arc.network` held up reliably and is now the dashboard's default (overridable via env).
+4. **viem doesn't auto-detect Multicall3** even when it's genuinely deployed on-chain (confirmed via `cast code` at the standard address) — it must be declared explicitly in the chain definition.
+
+**App Kit integration:** the "Sponsor a worker agent" panel uses `@circle-fin/app-kit`'s real `kit.send()` with a browser-wallet adapter (`@circle-fin/adapter-viem-v2`, connects to any EIP-1193 wallet e.g. MetaMask) — the exact same USDC-sponsorship action the Part 5 agents perform programmatically, now exposed as a human-facing action against `Blockchain.Arc_Testnet`. `unifiedBalance` (cross-chain balance aggregation) was deliberately not forced in: ClearPact is single-chain by design — Arc's predictable, USDC-denominated fees *are* the story — so a cross-chain balance feature would be hollow. Same honest-reframe call as the Part 5 Paymaster decision, not a shortcut.
+
+**Verified live:** loaded against the real deployed contracts and rendered the entire true transaction history from Parts 2–5 correctly — every job, every milestone, every dispute, every reputation change, in the right order, with the right amounts. Screenshot-verified in a real browser session, not just typechecked.
+
+**Next (Part 7 — deliberately paused):** GM wants hands-on time with this dashboard before video/deck/submission work starts — see CLAUDE.md decisions log, 6 Aug.
