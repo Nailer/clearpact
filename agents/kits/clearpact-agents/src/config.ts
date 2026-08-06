@@ -15,6 +15,7 @@ export const CHAIN = 'ARC-TESTNET' as const;
 
 export const ESCROW_ADDRESS = required('ESCROW_ADDRESS_V2') as `0x${string}`;
 export const REGISTRY_ADDRESS = required('REGISTRY_ADDRESS') as `0x${string}`;
+export const MILESTONE_ESCROW_ADDRESS = required('MILESTONE_ESCROW_ADDRESS') as `0x${string}`;
 
 /** Deployer/arbiter wallet — the only role that stays on a raw signed key
  *  (Circle CLI's `wallet import` reads its secret from an interactive TTY

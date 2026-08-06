@@ -1,6 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { CHAIN, ESCROW_ADDRESS, REGISTRY_ADDRESS, ARBITER_ADDRESS, ARBITER_PRIVATE_KEY } from './config';
+import {
+  CHAIN,
+  ESCROW_ADDRESS,
+  REGISTRY_ADDRESS,
+  MILESTONE_ESCROW_ADDRESS,
+  ARBITER_ADDRESS,
+  ARBITER_PRIVATE_KEY,
+} from './config';
 
 const execFileAsync = promisify(execFile);
 
@@ -213,4 +220,198 @@ export { ARBITER_ADDRESS };
 export async function keccak256Of(text: string): Promise<`0x${string}`> {
   const { stdout } = await execFileAsync('cast', ['keccak', text]);
   return stdout.trim() as `0x${string}`;
+}
+
+// ── Milestone escrow — nanopayments: pay-per-verified-chunk ─────────────
+
+function toWei(usdc: string): string {
+  return BigInt(Math.round(Number(usdc) * 1e18)).toString();
+}
+
+export async function milestoneNextJobId(): Promise<number> {
+  const result = await query(MILESTONE_ESCROW_ADDRESS, 'nextJobId()(uint256)');
+  return Number(parseCastUint(result));
+}
+
+/** Creates a 3-milestone job via the CLI-compatible scalar overload — see
+ *  MilestoneEscrow.createJob3 for why: Circle CLI's `wallet execute` ABI
+ *  encoder does not support array parameters (confirmed by testing; the
+ *  identical call works fine via `cast`), so the flexible N-milestone
+ *  `createJob(..., uint96[])` is reserved for non-agent/cast-driven use. */
+export async function createMilestoneJob3(
+  buyerWallet: `0x${string}`,
+  worker: `0x${string}`,
+  verifier: `0x${string}`,
+  specHash: `0x${string}`,
+  passScore: number,
+  deadline: number,
+  disputeWindowSeconds: number,
+  minWorkerStakeUsdc: string,
+  milestoneAmountsUsdc: [string, string, string],
+): Promise<{ jobId: number; tx: { txHash?: string; txId?: string } }> {
+  const jobId = await milestoneNextJobId();
+  const minStakeWei = toWei(minWorkerStakeUsdc);
+  const m0 = toWei(milestoneAmountsUsdc[0]);
+  const m1 = toWei(milestoneAmountsUsdc[1]);
+  const m2 = toWei(milestoneAmountsUsdc[2]);
+  const total = milestoneAmountsUsdc.reduce((s, a) => s + Number(a), 0);
+  const tx = await execute(
+    buyerWallet,
+    MILESTONE_ESCROW_ADDRESS,
+    'createJob3(address,address,bytes32,uint8,uint64,uint32,uint96,uint96,uint96,uint96)',
+    [worker, verifier, specHash, passScore, deadline, disputeWindowSeconds, minStakeWei, m0, m1, m2],
+    total.toString(),
+  );
+  return { jobId, tx };
+}
+
+export async function deliverMilestone(
+  workerWallet: `0x${string}`,
+  jobId: number,
+  milestoneIndex: number,
+  deliverableHash: `0x${string}`,
+) {
+  return execute(workerWallet, MILESTONE_ESCROW_ADDRESS, 'deliver(uint256,uint256,bytes32)', [
+    jobId,
+    milestoneIndex,
+    deliverableHash,
+  ]);
+}
+
+export async function submitMilestoneVerdict(
+  verifierWallet: `0x${string}`,
+  jobId: number,
+  milestoneIndex: number,
+  score: number,
+  verdictHash: `0x${string}`,
+) {
+  return execute(verifierWallet, MILESTONE_ESCROW_ADDRESS, 'submitVerdict(uint256,uint256,uint8,bytes32)', [
+    jobId,
+    milestoneIndex,
+    score,
+    verdictHash,
+  ]);
+}
+
+export async function settleMilestone(callerWallet: `0x${string}`, jobId: number, milestoneIndex: number) {
+  return execute(callerWallet, MILESTONE_ESCROW_ADDRESS, 'settle(uint256,uint256)', [jobId, milestoneIndex]);
+}
+
+export async function disputeMilestone(
+  callerWallet: `0x${string}`,
+  jobId: number,
+  milestoneIndex: number,
+) {
+  return execute(callerWallet, MILESTONE_ESCROW_ADDRESS, 'dispute(uint256,uint256)', [jobId, milestoneIndex]);
+}
+
+export async function getMilestoneStatus(jobId: number, milestoneIndex: number): Promise<number> {
+  const result = await query(
+    MILESTONE_ESCROW_ADDRESS,
+    'getMilestone(uint256,uint256)((uint96,bytes32,bytes32,uint64,uint8,uint8))',
+    [jobId, milestoneIndex],
+  );
+  const fields = result.replace(/^\(|\)$/g, '').split(', ');
+  return Number(fields[5]);
+}
+
+/// Arbitration on a milestone stays on the raw arbiter key, same rationale
+/// as ClearPactEscrow.arbitrate.
+export async function arbitrateMilestone(
+  jobId: number,
+  milestoneIndex: number,
+  workerBps: number,
+  slashBps: number,
+): Promise<{ txHash: string }> {
+  const rpc = process.env.ARC_TESTNET_RPC!;
+  const { stdout } = await execFileAsync('cast', [
+    'send',
+    MILESTONE_ESCROW_ADDRESS,
+    'arbitrate(uint256,uint256,uint256,uint256)',
+    String(jobId),
+    String(milestoneIndex),
+    String(workerBps),
+    String(slashBps),
+    '--private-key',
+    ARBITER_PRIVATE_KEY,
+    '--rpc-url',
+    rpc,
+    '--json',
+  ]);
+  const parsed = JSON.parse(stdout);
+  return { txHash: parsed.transactionHash };
+}
+
+// ── Gas/gap sponsorship — Arc's answer to "Paymaster" ────────────────────
+//
+// Circle's own Paymaster product (pay gas in USDC via ERC-4337) runs only on
+// Base/Arbitrum/Avalanche/Ethereum/Optimism/Polygon/Unichain — not Arc, per
+// developers.circle.com/paymaster (checked live). Arc has native ERC-4337
+// account-abstraction support, but only via bring-your-own third-party
+// bundler/paymaster (Pimlico, Biconomy, ZeroDev) — a new external account and
+// integration surface with no time left to safely vet before the deadline.
+//
+// Arc's actual answer is structural, not a bolt-on: gas *is* USDC, natively,
+// so there is no separate volatile gas token to sponsor away in the first
+// place — every tx this whole protocol has ever sent already paid gas in the
+// same currency it settles jobs in. The remaining real problem a paymaster
+// solves for agents — "a brand new agent needs *some* funds before it can
+// afford its first transaction" — is solved directly here: a buyer (or the
+// protocol) can sponsor a newcomer worker with a small starter grant, a
+// plain native transfer, so it can afford to stake a bond and deliver its
+// first job.
+export async function sponsorWorker(
+  sponsorWallet: `0x${string}`,
+  workerAddress: `0x${string}`,
+  amountUsdc: string,
+): Promise<{ txHash?: string; txId?: string }> {
+  const bin = await resolveCircleBin();
+  const { stdout } = await execFileAsync(bin, [
+    'wallet',
+    'transfer',
+    workerAddress,
+    '--amount',
+    amountUsdc,
+    '--address',
+    sponsorWallet,
+    '--chain',
+    CHAIN,
+    '--output',
+    'json',
+  ]);
+  const parsed = JSON.parse(stdout);
+  const data = parsed.data ?? parsed;
+  return { txHash: data?.transactionHash ?? data?.txHash, txId: data?.transactionId ?? data?.txId };
+}
+
+// ── Circle Gateway — the Nanopayments settlement rail ────────────────────
+//
+// Gateway is the batched, gas-free settlement layer Circle Nanopayments is
+// built on. `direct` deposits are confirmed live on ARC-TESTNET (checked via
+// `circle gateway deposit --help`, which lists ARC-TESTNET among the
+// `direct`-method source chains). A worker depositing its ClearPact earnings
+// into Gateway is the real, provable "our agents use Circle Nanopayments"
+// story: the same batched-settlement rail Circle's x402 marketplace uses is
+// available to route milestone payouts through, not just claimed.
+export async function gatewayDeposit(
+  wallet: `0x${string}`,
+  amountUsdc: string,
+): Promise<{ raw: any }> {
+  const raw = await circleJson([
+    'gateway',
+    'deposit',
+    '--amount',
+    amountUsdc,
+    '--address',
+    wallet,
+    '--chain',
+    CHAIN,
+    '--method',
+    'direct',
+  ]);
+  return { raw };
+}
+
+export async function gatewayBalance(wallet: `0x${string}`): Promise<any> {
+  return circleJson(['gateway', 'balance', '--address', wallet, '--chain', CHAIN]);
 }

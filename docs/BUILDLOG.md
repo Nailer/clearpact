@@ -157,3 +157,50 @@ Final on-chain stats for the worker: 2 delivered / 1 passed / 1 dispute lost / 0
 **Net result:** worker reputation moved **95 → 96 → 54** across the two acts, purely from on-chain outcomes the agents themselves produced — no scripted scores, no scripted verdicts. This is the live proof-of-concept for the entire pitch: autonomous agents, real decision logic, real USDC settlement, real consequences for bad behavior.
 
 **Next (Part 5):** Nanopayments for milestone/streaming jobs, Paymaster for sponsored agent gas.
+
+---
+
+## Part 5 — Nanopayments (milestone streaming) & gas sponsorship, live on Arc (6 Aug 2026)
+
+**Objective:** the GM was explicit — full ambition here, no scope-cutting. Real pay-per-verified-chunk settlement, and a real answer to gas sponsorship, even where the obvious first-choice product doesn't fit.
+
+**Research first, before writing code:**
+- **Circle Gateway (the Nanopayments settlement rail) genuinely supports Arc testnet** — `circle gateway deposit --help` lists ARC-TESTNET among the `direct`-method source chains. Confirmed live later in this part.
+- **Circle's own Paymaster product does not run on Arc at all** — checked live against developers.circle.com/paymaster: it supports Arbitrum, Base, Avalanche, Ethereum, Optimism, Polygon, Unichain. Not Arc.
+- **Arc does have native ERC-4337 account abstraction**, but only via bring-your-own third-party bundler/paymaster (Pimlico, Biconomy, ZeroDev) — a new external account and integration surface with no safe time left to vet this close to the deadline.
+- Decision: rather than force a shaky third-party integration or quietly drop the requirement, solve the *actual underlying problem* Paymaster exists to solve, in Arc's own idiom — see below.
+
+**New contract (`contracts/src/MilestoneEscrow.sol`):** ClearPact's nanopayment rail — a job's budget splits across up to 3 milestones, each independently delivered, verified, and released as it passes, instead of one lump sum at the end. Shares the existing `ReputationRegistry` with `ClearPactEscrow`: a worker's bond and reputation are one identity across both settlement shapes. The bond locks once (on first delivery) and covers the whole job, not each milestone separately. Disputes and arbitration work per-milestone, so one contested chunk doesn't hold the rest of the job hostage.
+
+**A real Circle CLI limitation, found by testing, not assumed:** `circle wallet execute`'s ABI encoder does not support array parameters (`uint96[]`) — confirmed by testing the *identical* call via `cast send`, which worked perfectly, isolating the failure to the CLI, not the contract. Rather than drop to a raw key for milestone job creation (breaking the "agents act through Circle Wallets" principle), added `createJob3` — a CLI-friendly overload taking exactly 3 milestone amounts as scalar parameters instead of an array, internally routed through a shared `_createJob` so both entry points share one code path.
+
+**Tests:** 14 new tests (48/48 total across all three contracts) — independent milestone release, bond-locked-once-not-per-milestone, bond-returned-only-after-all-milestones-resolved, one milestone failing without blocking the others, per-milestone dispute/arbitration slashing the shared bond, the `createJob3` overload matching the array version, and a 3-parameter fuzz test proving funds conservation across every combination of milestone outcomes.
+
+**Deployment (Arc testnet):**
+
+| Contract | Address |
+|----------|---------|
+| MilestoneEscrow | [`0x783A0230b5912520B06e49a98BB578975A370391`](https://testnet.arcscan.app/address/0x783A0230b5912520B06e49a98BB578975A370391) |
+
+(Authorized against the existing Part 3 `ReputationRegistry` — no redeployment of the registry, no loss of prior reputation history.)
+
+**Gas sponsorship — Arc's actual answer, not a workaround.** The real problem a Paymaster solves for agents is "a brand-new agent needs *some* funds before it can afford its first transaction." On Arc, gas and the payment currency are already the same USDC — there's no separate volatile token to sponsor away in the first place. So instead of bolting on infrastructure Arc doesn't need, the buyer agent can send a newcomer worker a plain starter grant (`sponsor_worker`) — a real, agent-decided transfer, sized by the agent itself based on the gas + bond + Gateway-minimum it will actually need.
+
+**Live demo — a genuinely new agent, sponsored and paid in three streaming installments, fully autonomous:**
+
+A fresh, zero-balance Circle wallet (never touched before this run) was hired, funded, and paid entirely by agent decisions:
+
+| Step | Actor decision | Tx |
+|------|----------------|-----|
+| Sponsor a brand-new worker | Buyer independently sized the grant at 0.8 USDC (gas + bond + Gateway minimum) | [`0x6408…7800a`](https://testnet.arcscan.app/tx/0x6408a748fec983ad541bfd63f84fe098a415955e3b994fa6cd57a776ef77800a) |
+| Post 3-milestone job | Buyer set milestone sizes (0.10/0.12/0.10), pass score, bond, dispute window — all independently | [`0xd19c…ecf37`](https://testnet.arcscan.app/tx/0xd19cdb39bb68973ae94dcdf45cc2c2a56bb2cdfed5851b7265e654b1f1ecf937) |
+| Milestone 0: stake, deliver, verdict 97, settle | Worker wrote a real project summary; verifier graded it independently | stake [`0x3d1d…c2184`](https://testnet.arcscan.app/tx/0x3d1dd958c16c7dac3d277413005fa015628a361defedd5e908f39639fbbc2184) · deliver [`0xf517…7f6ca1`](https://testnet.arcscan.app/tx/0xf5173abb255320a557372bbcdb5f93f54aea624e4e566db2102dafbf647f6ca1) · verdict [`0x4ee0…59df43`](https://testnet.arcscan.app/tx/0x4ee037a40936739fa13c2172b943f96e7e6d4ecaaef9abf81320b01cce59df43) · settle [`0x8126…6ed0df`](https://testnet.arcscan.app/tx/0x81267dc73465ff1bae5208bd98d986b0711429a61864ed7cd1135f221a6ed0df) |
+| Milestone 1: deliver, verdict 97, settle — paid *before milestone 2 even started* | Bond already locked from milestone 0 — no re-staking needed, contract enforced this correctly | deliver [`0xc750…cb16b70`](https://testnet.arcscan.app/tx/0xc75002e155c49a12457e206b453468c0af82c9f03e20a9f86ffeae058cb16b70) · verdict [`0x03df…21118a`](https://testnet.arcscan.app/tx/0x03dfc37825c5dcdb59592f07d84f8aa36e6752a2e045b60742fd590ccb21118a) · settle [`0xf806…6b5d7286`](https://testnet.arcscan.app/tx/0xf806245683c685fc6d589e41d9a71e4e9a9eae14f57409034a05b0ff6b5d7286) |
+| Milestone 2: deliver, verdict 100, settle | | deliver [`0x91da…731dc2`](https://testnet.arcscan.app/tx/0x91da63cd3b1297ecad6b7b6f5c7120649f1bdf4e8ad3d1a6bec81253bf731dc2) · verdict [`0xe2c0…84c2c6e`](https://testnet.arcscan.app/tx/0xe2c0769f4435dcb87b1fe3d30f7ebb4860be6551a6523d10ee3df439984c2c6e) · settle [`0x21fe…8ca152a`](https://testnet.arcscan.app/tx/0x21fe5c928d6573df86e283740fbbb4ec270a3131211aafb7eb5c6dfab8ca152a) |
+| Worker deposits earnings into Circle Gateway | Real, confirmed Gateway balance afterward | approve [`0x694b…935dd7`](https://testnet.arcscan.app/tx/0x694b5075276c6b18361482641ed314428e1575976bf87be404b00d8a3c935dd7) · deposit [`0x09ab…983d75`](https://testnet.arcscan.app/tx/0x09ab432c1381f8c88cfa7a6ac0d7caab8f4fb42e2f22c30c80c9b63079983d75) |
+
+**Result:** a worker that held zero funds at the start of this run finished it with a **99/100 on-chain reputation** (up from a sponsored newcomer), three independently verified and paid milestones, and 0.5 USDC parked in Circle Gateway — none of it scripted. One honest gotcha caught mid-run and fixed: the first attempt gave the worker a *generic* job-status tool that queried the wrong contract (ClearPactEscrow, not MilestoneEscrow — the two have separate, overlapping jobId counters), which confused the worker into skipping its bond. Fixed with a dedicated `get_milestone_status` tool; re-run succeeded cleanly end to end.
+
+**Known scope limit (by choice, not oversight):** `MilestoneEscrow` doesn't yet have a `cancelExpired` equivalent to reclaim an abandoned job's escrow after its deadline (ClearPactEscrow has this). A test job created before the tooling fix (`jobId 1`) sits harmlessly abandoned as a result — its 0.32 USDC stays locked until its deadline passes, no funds at risk, just not reclaimable early. Low priority given the time budget for the remaining parts.
+
+**Next (Part 6):** Next.js dashboard — live escrows, reputations, and money flow — the visual centerpiece for the demo video.
