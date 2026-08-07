@@ -1,9 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { explorerTx } from "@/lib/config";
+import { explorerTx, ARC_TESTNET } from "@/lib/config";
 
 type Phase = "idle" | "connecting" | "sending" | "done" | "error";
+
+type Eip1193Provider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+
+/** Arc Testnet isn't a default network in MetaMask (or most wallets) — it
+ *  has to be registered via wallet_addEthereumChain (EIP-3085) before the
+ *  wallet will recognize wallet_switchEthereumChain (EIP-3326) requests for
+ *  it. App Kit's `send()` issues a switch request internally; without this
+ *  step first, that switch fails with "Unrecognized chain ID". Adding an
+ *  already-known chain is a harmless no-op, so this is safe to call every
+ *  connect. */
+async function ensureArcTestnetChain(eth: Eip1193Provider): Promise<void> {
+  const chainIdHex = `0x${ARC_TESTNET.id.toString(16)}`;
+  try {
+    await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainIdHex }] });
+  } catch {
+    await eth.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: chainIdHex,
+          chainName: ARC_TESTNET.name,
+          nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+          rpcUrls: [ARC_TESTNET.rpcUrl],
+          blockExplorerUrls: [ARC_TESTNET.explorer],
+        },
+      ],
+    });
+  }
+}
 
 /**
  * Real Circle App Kit `send` — the same primitive the Part 5 agents used
@@ -27,9 +56,10 @@ export function SponsorPanel() {
     setError(null);
     setPhase("connecting");
     try {
-      const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+      const eth = (window as unknown as { ethereum?: Eip1193Provider }).ethereum;
       if (!eth) throw new Error("No browser wallet found (install MetaMask or similar).");
       const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
+      await ensureArcTestnetChain(eth);
       setAccount(accounts[0]);
       setPhase("idle");
     } catch (e) {
@@ -43,11 +73,12 @@ export function SponsorPanel() {
     setTxHash(null);
     setPhase("sending");
     try {
-      const eth = (window as unknown as { ethereum?: unknown }).ethereum;
+      const eth = (window as unknown as { ethereum?: Eip1193Provider }).ethereum;
       if (!eth) throw new Error("No browser wallet found.");
       if (!workerAddress.startsWith("0x") || workerAddress.length !== 42) {
         throw new Error("Enter a valid worker address (0x...).");
       }
+      await ensureArcTestnetChain(eth);
 
       const [{ AppKit, Blockchain }, { createAdapterFromProvider }] = await Promise.all([
         import("@circle-fin/app-kit"),
