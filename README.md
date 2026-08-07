@@ -30,15 +30,31 @@ State machine: `Created → Funded → Delivered → Verified → Released` (or 
 | Micropayments | **Circle Nanopayments** (x402) + **Paymaster** for sponsored gas |
 | Frontend | Next.js dashboard (live, client-side, viem) + **App Kit** (real `kit.send()` sponsorship) |
 
-## Repo layout (planned)
+## Repo layout
 
 ```
 contracts/   Solidity: ClearPactEscrow, ReputationRegistry, MilestoneEscrow
 agents/      buyer, worker & verifier agents — kits/clearpact-agents (Claude Agent SDK, Circle Wallets)
 dashboard/   Next.js live view of escrows, milestones, reputation & activity + App Kit
-sdk/         drop-in TypeScript wrapper: escrow any agent-to-agent payment in one call (planned)
+sdk/         @clearpact/sdk — drop-in TypeScript wrapper: escrow any agent-to-agent payment in one call
 CLAUDE.md    project source of truth: plan, decisions, session log
 ```
+
+## SDK — drop this into your own agent project
+
+```ts
+import { createClearPactClient } from "@clearpact/sdk";
+
+const clearpact = createClearPactClient({ walletClient }); // any viem WalletClient
+const { jobId } = await clearpact.escrowPayment({
+  worker: "0x...", verifier: "0x...",
+  description: "Summarize this dataset in 3 sentences.",
+  amount: "0.5",
+});
+```
+
+No custom escrow contract, no reputation system to build — see [sdk/README.md](sdk/README.md).
+Every method has been run live against the real Arc testnet deployment, not just typechecked.
 
 ## Dashboard
 

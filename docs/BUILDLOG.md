@@ -224,3 +224,23 @@ A fresh, zero-balance Circle wallet (never touched before this run) was hired, f
 **Verified live:** loaded against the real deployed contracts and rendered the entire true transaction history from Parts 2–5 correctly — every job, every milestone, every dispute, every reputation change, in the right order, with the right amounts. Screenshot-verified in a real browser session, not just typechecked.
 
 **Next (Part 7 — deliberately paused):** GM wants hands-on time with this dashboard before video/deck/submission work starts — see CLAUDE.md decisions log, 6 Aug.
+
+---
+
+## Part 7 (in progress) — SDK packaging (6 Aug 2026)
+
+**Objective:** the differentiation play locked in on day one — package the escrow as something *other* teams can drop into their own agent projects, not just our own demo.
+
+**`sdk/` — `@clearpact/sdk`:** a standalone TypeScript package (own `package.json`, builds independently) wrapping all three live contracts behind a small, ergonomic API — `escrowPayment()`, `deliver()`, `submitVerdict()`, `settle()`, `dispute()`/`arbitrate()`, the milestone equivalents, `stakeBond()`, and `getReputation()`. Takes any viem `WalletClient` with an account attached — a raw key, a Circle adapter, or a connected browser wallet all work identically, so it's not coupled to how ClearPact's own agents happen to sign.
+
+**A real bug, found only by actually running it, not by typechecking:** the first version predicted a new job's ID by reading `nextJobId()` *before* broadcasting the `createJob` transaction. A live test proved this pattern is unsafe: `escrowPayment()` returned, and the very next call — `deliver()` — reverted with `WrongStatus`, because `viem`'s `writeContract` resolves as soon as a transaction is *broadcast*, not once it's mined. Any caller who awaits one SDK call and immediately fires the next (which is the obviously "correct" way to write this code) would hit sporadic, hard-to-debug reverts depending purely on network timing.
+
+**The fix, applied everywhere, not just at the call site that broke:** every write method now waits for the transaction receipt before resolving, and `escrowPayment`/`escrowMilestonePayment` read the real `jobId` back out of the confirmed `JobCreated` event log instead of guessing it from a pre-read counter. This costs one extra round-trip per call and makes an entire class of bug structurally impossible for anyone using the SDK — the right tradeoff for a payments primitive.
+
+**Verified live, twice, after the fix** — not just typechecked:
+- Full single-payment lifecycle: `escrowPayment → deliver → submitVerdict → settle`, correct job status transitions, worker reputation correctly updated (score 100, `jobsDelivered: 1`, `totalEarned` matching the escrowed amount exactly).
+- Milestone job creation: `createJob3` argument encoding and `JobCreated` event decoding against `MilestoneEscrow`'s distinct ABI, 3 milestone amounts read back exact.
+
+**Examples:** [`sdk/examples/basic-escrow.ts`](../sdk/examples/basic-escrow.ts) and [`sdk/examples/milestone-job.ts`](../sdk/examples/milestone-job.ts), both typechecked against the real published types (`tsconfig.examples.json`), not just prose in a README.
+
+**Not yet done:** publish to the npm registry (needs an npm account — GM task, optional; the package installs fine directly from the repo in the meantime). Video, deck, and final platform submission still open.

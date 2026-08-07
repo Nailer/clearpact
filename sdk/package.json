@@ -1,0 +1,32 @@
+{
+  "name": "@clearpact/sdk",
+  "version": "0.1.0",
+  "description": "Drop-in escrow, verification, and reputation for agent-to-agent USDC payments on Arc. Wrap any agent-to-agent payment in one call.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.examples.json",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "viem": "^2.55.11"
+  },
+  "keywords": ["arc", "circle", "usdc", "escrow", "agents", "ai-agents", "x402", "clearpact"],
+  "license": "Apache-2.0"
+}
