@@ -8,6 +8,31 @@
 
 ---
 
+## 0. Quick resume (read this first, every new session)
+
+**Where we are:** Parts 0–6 of 8 are done and live on Arc testnet (contracts, agents, dashboard). **Part 7 (SDK packaging, video, deck, final submission) is deliberately paused** — the GM wants hands-on time with the Part 6 dashboard before we write/record the pitch. See §4 decisions log, 6 Aug entry. **Do not start Part 7 work until the GM explicitly says to resume it.**
+
+**To (re)run the dashboard** (nothing was left running between sessions — a fresh session must start it):
+```bash
+cd /Users/aje/Documents/Github/money-hack/dashboard
+npm install   # first time only
+npm run dev
+```
+Then open **http://localhost:3000**. No `.env.local` or API keys needed — `src/lib/config.ts` has working fallback defaults pointing at the real deployed contracts and a reliable RPC (dRPC, not the primary Arc RPC — see §6 session log, Part 6, for why). In Claude Code, prefer the Browser tool's `preview_start` with name `clearpact-dashboard` (config already in `.claude/launch.json`) over raw `npm run dev` in Bash.
+
+**Live deployed contracts (Arc testnet, chain 5042002)** — also in `.env`:
+| Contract | Address |
+|---|---|
+| ClearPactEscrow v2 | `0xDbd9976d55987c956DBfEcad1b98A3Cf00e58b28` |
+| ReputationRegistry | `0x3c639b6C061F4C14dbac60E0C48010Ef7888B1Ec` |
+| MilestoneEscrow | `0x783A0230b5912520B06e49a98BB578975A370391` |
+
+**Repo:** public at github.com/Nailer/clearpact. PM (Claude) pushes directly — GM does not need to.
+
+**What to do next:** wait for the GM to confirm they've used the dashboard, then resume with Part 7. Read §5 and §6 in full before acting — they carry the real detail behind this summary.
+
+---
+
 ## 1. Hackathon context
 
 **Build on Arc** — 4-week online hackathon by Circle. Build real products on **Arc** (Circle's stablecoin-native L1, USDC-denominated gas, sub-second settlement) using **USDC** as the money layer.
@@ -26,7 +51,7 @@
 
 **Resources**: [Arc docs](https://docs.arc.io/) · [App Kits](https://docs.arc.io/app-kit) · [Circle dev platform](https://developers.circle.com/) · [Agent Stack starter kits](https://github.com/circlefin/agent-stack-starter-kits) · Build on Circle Discord.
 
-## 2. The idea (status: PROPOSED — awaiting GM approval)
+## 2. The idea (status: APPROVED & BUILT — Parts 0–6 live on Arc testnet, see §5)
 
 **ClearPact — the trust & settlement layer for the agent economy.**
 An on-chain escrow + verification + reputation protocol on Arc that lets AI agents safely hire and pay other AI agents (or services) in USDC. Payment is **conditional on verified outcomes**, not promises.
@@ -52,11 +77,11 @@ Imagine robots doing homework for other robots for pocket money. Problem: a robo
 ### MVP scope for the 3-min demo
 Two agents autonomously negotiate a job (e.g., "scrape & summarize X" or "generate a dataset"), escrow funds on Arc, deliver, get machine-verified, settle in USDC — then a second run where a bad delivery triggers dispute → slash → reputation drop. All visible live on the dashboard.
 
-## 3. Tech stack (planned)
-- Contracts: Solidity on Arc testnet (EVM-compatible), Foundry or Hardhat; deploy via Circle Contracts where possible.
-- Agents: TypeScript, Circle Agent Stack starter kit (Claude Agent SDK variant), circle-tools wrappers, Circle Wallets, Nanopayments/x402, Paymaster.
-- Frontend: Next.js dashboard + App Kits.
-- Repo: this directory (`money-hack`). Not yet a git repo — needs `git init` + GitHub remote before Checkpoint 2 (26 Jul).
+## 3. Tech stack (as built)
+- Contracts: Solidity 0.8.26 + Foundry, deployed to Arc testnet — `contracts/src/{ClearPactEscrow,ReputationRegistry,MilestoneEscrow}.sol`, 48/48 tests passing.
+- Agents: TypeScript, Claude Agent SDK, vendored Circle Agent Stack starter kit — `agents/kits/clearpact-agents`. Writes go through genuine Circle-managed wallets via `circle wallet execute`; reads via `cast call` (Circle's `contract query` returns undecoded hex).
+- Frontend: Next.js 16 dashboard, entirely client-side via viem (no backend/indexer) + real Circle App Kit `kit.send()` — `dashboard/`.
+- Repo: `money-hack`, public at github.com/Nailer/clearpact, PM pushes directly.
 
 ## 4. Decisions log
 - 6 Aug 2026 — GM decision on the compressed timeline (final due 9 Aug, 3 days out): **do not cut scope.** Give Part 5 (Nanopayments + Paymaster) full ambition; de-risk instead of shrink. Separately, **Part 7 (video/deck/submission) deliberately held** — GM wants to interact with the live project himself (via the Part 6 dashboard) before writing/recording the pitch, since authentic narration requires having actually used the product. PM does not feel strongly otherwise — this is sound and likely produces a stronger video. Resume Part 7 prep once GM has had hands-on time with Part 6.
@@ -91,6 +116,7 @@ Two agents autonomously negotiate a job (e.g., "scrape & summarize X" or "genera
 - [ ] Later: record/approve 3-min video, submit final before 9 Aug AoE
 
 ## 6. Session log (newest first — every session appends here)
+- **6 Aug 2026 (Claude Code, session 9 cont'd):** GM asked to continue in a fresh chat with full context preserved. Added **§0 Quick Resume** at the top of this file (current status, exact dashboard restart commands, live contract addresses, explicit "don't start Part 7 yet" instruction) so any new session — Claude Code or Claude chat/web — can pick up immediately without reading the full session log first. Refreshed §2 idea status (was still "PROPOSED", now correctly "APPROVED & BUILT") and §3 tech stack (was still "planned", now reflects what's actually shipped). Note for the next session: the Part 6 dev server does **not** persist across sessions/environments — it must be restarted with the commands in §0.
 - **6 Aug 2026 (Claude Code, session 9 — Part 6):** **Part 6 shipped:** `dashboard/` — Next.js 16 (App Router, Turbopack) + viem, zero backend/indexer, entirely client-side polling of all three contracts every 15s via `multicall`. Live: stats row, agent reputation leaderboard, combined jobs table (single-payment + expandable milestone jobs), decoded event-log activity feed, and a real Circle App Kit "sponsor a worker agent" panel (`kit.send()` via `@circle-fin/adapter-viem-v2` browser-wallet adapter — the human-facing twin of Part 5's `sponsor_worker` agent tool). **Four real bugs found and fixed against live data:** (1) viem decodes a function returning one struct-typed tuple as a named object, but an auto-generated public-mapping getter for the same struct shape (`jobs()`, `statsOf()`) has multiple top-level outputs and decodes *positionally* instead — milestone jobs rendered blank buyer/worker until this was caught; (2) Arc testnet RPC providers cap `eth_getLogs` to a few thousand blocks (dRPC free tier: 10,000) — activity feed now chunks scans into 9,000-block windows; (3) the primary public RPC rate-limited hard under this session's usage, switched default to dRPC's endpoint; (4) viem doesn't auto-detect Multicall3 even when genuinely deployed on-chain — had to declare it explicitly in the chain config. Verified in a real browser session against live contracts: rendered the entire true Part 2–5 transaction history correctly. **Consciously did not force Unified Balance** — ClearPact is single-chain by design, so cross-chain balance aggregation would be a hollow integration; same honest-reframe logic as the Part 5 Paymaster call. BUILDLOG Part 6 entry added. **Dev server is running now (`http://localhost:3000`, launch config at `.claude/launch.json`) — per the 6 Aug decision, Part 7 stays paused until GM has interacted with it live.**
 - **6 Aug 2026 (Claude Code, session 8 — Part 5):** GM held firm on scope after the timeline flag: "shoot for the stars," no cutting, but agreed to hold Part 7 (video/deck/submission) until GM has had hands-on time with the live project via Part 6's dashboard — see decisions log. **Research before building:** confirmed live that Circle Gateway (Nanopayments) genuinely supports ARC-TESTNET (`direct` deposit method), but Circle's own Paymaster product does **not** run on Arc at all (Base/Arbitrum/Avalanche/Ethereum/Optimism/Polygon/Unichain only — checked against developers.circle.com/paymaster). Arc has native ERC-4337 account abstraction but only via third-party bundlers (Pimlico/Biconomy/ZeroDev) — too much new integration surface this close to the deadline. **Decision: reframe, don't fake it** — Arc's gas-is-USDC design already removes the problem Paymaster solves, so shipped a real `sponsor_worker` feature (buyer funds a newcomer's wallet directly) instead of a shaky third-party bolt-on. **Part 5 shipped:** `MilestoneEscrow.sol` — pay-per-verified-chunk nanopayments, up to 3 independently delivered/verified/paid milestones per job, sharing the Part 3 `ReputationRegistry` (one identity, two settlement shapes). Found and worked around a real Circle CLI limitation: `wallet execute` doesn't support array ABI parameters (confirmed via a working `cast send` control test) — added `createJob3`, a scalar-parameter overload, rather than dropping to a raw key. 48/48 tests total (14 new). **Deployed: `0x783A0230b5912520B06e49a98BB578975A370391`.** **Live demo, fully autonomous, no shortcuts:** a genuinely fresh zero-balance Circle wallet was sponsored 0.8 USDC by the buyer agent (its own sizing), hired for a 3-milestone job, and paid in three independent streaming installments as each was delivered and graded — then deposited real earnings into Circle Gateway. Worker reputation 50→99, zero scripted scores. Caught and fixed one real bug mid-run: a shared `get_job_status` tool queried the wrong contract (job-id collision between ClearPactEscrow and MilestoneEscrow), confusing the worker into skipping its bond — fixed with a dedicated `get_milestone_status` tool. **Known gap (scope choice, not a bug):** no `cancelExpired` on MilestoneEscrow yet; one abandoned test job's 0.32 USDC sits locked until its deadline, no funds at risk. BUILDLOG Part 5 entry added with full tx evidence. **Gate open: awaiting GM go-ahead for Part 6 (dashboard) — Part 7 intentionally not started, per the decision above.**
 - **6 Aug 2026 (Claude Code, session 7 — Part 4):** ⚠️ **Timeline flag: real-world date jumped from 25 Jul to 6 Aug between sessions — final submission (9 Aug) is now 3 days out, not the ~2 weeks the plan assumed.** GM approved logo (navy hexagon + checkmark, `assets/logo.svg`, embedded in README) and gave Part 4 go-ahead. GM asked a strategic question about discovery/marketplace: agreed ClearPact stays discovery-agnostic infra (not a marketplace) — any two agents can find each other however they like (Circle's own Agent Marketplace, a private integration, a future lightweight reputation-directory view in Part 6) and just point at ClearPactEscrow to settle; permissionless, no pre-registration required. **Part 4 shipped:** `agents/kits/clearpact-agents` — buyer/worker/verifier as three independent Claude Agent SDK agents, each with a role-scoped MCP tool server. Chain interaction layer (`chain.ts`) uses `circle wallet execute` for writes (genuine Circle-managed agent wallets, not raw keys) and `cast call` for reads (Circle's `contract query` returns undecoded hex despite its docs). Arbitration stays on the Part 2/3 raw deployer key (protocol-admin action; `circle wallet import` needs an interactive TTY). **Debugging marathon on Circle CLI testnet auth** (undocumented `--testnet` flag on both `wallet login` and `wallet create`; `wallet create` alone is capped at 5 mainnet-only wallets and never reaches Arc testnet) — full detail in BUILDLOG, this cost the most time in the session. **Live 2-act demo, fully autonomous:** buyer/worker/verifier agents independently decided job terms, wrote real deliverables, and graded them — Act 1 honest job scored 97 and auto-paid; Act 2 corner-cutting delivery scored 3, was disputed, and slashed. Worker reputation moved 95→96→54 with zero scripted scores. BUILDLOG Part 4 entry added with full tx evidence. **Gate open: awaiting GM go-ahead for Part 5 (Nanopayments + Paymaster) — GM should also weigh in on whether the compressed timeline changes scope for Parts 5-7.**
