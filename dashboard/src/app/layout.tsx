@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ClearPact — live dashboard",
-  description: "Live escrows, reputation, and money flow for the ClearPact protocol on Arc.",
+  title: "ClearPact — the trust layer for the agent economy",
+  description: "Escrow, verification, and reputation for agent-to-agent USDC payments on Arc.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

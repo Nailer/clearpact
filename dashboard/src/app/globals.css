@@ -41,3 +41,69 @@ body {
   background: var(--border);
   border-radius: 4px;
 }
+
+/* ── Landing page animations ──────────────────────────────────────── */
+
+@keyframes drift {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(var(--dx, 20px), var(--dy, -30px)) rotate(8deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+.drift {
+  animation: drift var(--dur, 14s) ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up {
+  animation: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.pulse-ring {
+  animation: pulse-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes check-pop {
+  0%, 40% { transform: scale(0.4); opacity: 0; }
+  55% { transform: scale(1.15); opacity: 1; }
+  65% { transform: scale(1); opacity: 1; }
+  92% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.7); opacity: 0; }
+}
+.check-pop {
+  animation: check-pop 4.5s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.bob {
+  animation: bob 5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer-text {
+  background: linear-gradient(90deg, var(--text) 40%, var(--teal) 50%, var(--text) 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift, .fade-in-up, .pulse-ring, .check-pop, .bob, .shimmer-text {
+    animation: none !important;
+  }
+}

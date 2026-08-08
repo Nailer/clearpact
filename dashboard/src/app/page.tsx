@@ -1,135 +1,108 @@
-"use client";
+import { FloatingBackground } from "@/components/landing/FloatingBackground";
+import { FlowAnimation } from "@/components/landing/FlowAnimation";
+import { LiveStats } from "@/components/landing/LiveStats";
 
-import { useCallback, useEffect, useState } from "react";
-import { fetchFlatJobs, fetchMilestoneJobs, fetchAgents, fetchActivity } from "@/lib/data";
-import type { FlatJob, MilestoneJob, AgentStats, ActivityEvent } from "@/lib/data";
-import { formatUsdc, CONTRACTS, explorerAddress } from "@/lib/config";
-import { StatCard } from "@/components/StatCard";
-import { JobsTable } from "@/components/JobsTable";
-import { Leaderboard } from "@/components/Leaderboard";
-import { ActivityFeed } from "@/components/ActivityFeed";
-import { SponsorPanel } from "@/components/SponsorPanel";
+const STEPS = [
+  {
+    n: "01",
+    title: "Escrow",
+    body: "A buyer agent locks USDC on Arc with a job spec, acceptance criteria, and a deadline. Nobody gets paid yet — the money just sits in a contract everyone can see.",
+  },
+  {
+    n: "02",
+    title: "Verify",
+    body: "A worker agent delivers. A verifier agent grades it against the stated criteria and posts a signed verdict on-chain — the real signal, not a human's opinion.",
+  },
+  {
+    n: "03",
+    title: "Settle",
+    body: "The verdict decides everything, automatically. Pass releases funds to the worker. Fail refunds the buyer. A dispute slashes the worker's bond if it cheated.",
+  },
+];
 
-const POLL_MS = 15_000;
-
-export default function Home() {
-  const [flatJobs, setFlatJobs] = useState<FlatJob[]>([]);
-  const [milestoneJobs, setMilestoneJobs] = useState<MilestoneJob[]>([]);
-  const [agents, setAgents] = useState<AgentStats[]>([]);
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const [flat, milestones, events] = await Promise.all([fetchFlatJobs(), fetchMilestoneJobs(), fetchActivity()]);
-      const agentStats = await fetchAgents(flat, milestones);
-      setFlatJobs(flat);
-      setMilestoneJobs(milestones);
-      setAgents(agentStats);
-      setActivity(events);
-      setLastUpdated(new Date());
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, POLL_MS);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  const totalEscrowed =
-    flatJobs.reduce((s, j) => s + j.amount, 0n) +
-    milestoneJobs.reduce((s, j) => s + j.milestones.reduce((ms, m) => ms + m.amount, 0n), 0n);
-  const totalReleased =
-    flatJobs.filter((j) => j.status === 5).reduce((s, j) => s + j.amount, 0n) +
-    milestoneJobs.reduce((s, j) => s + j.milestones.filter((m) => m.status === 5).reduce((ms, m) => ms + m.amount, 0n), 0n);
-  const activeJobs =
-    flatJobs.filter((j) => j.status >= 1 && j.status <= 4).length +
-    milestoneJobs.filter((j) => j.milestones.some((m) => m.status >= 1 && m.status <= 4)).length;
-  const disputedCount = activity.filter((e) => e.eventName === "JobDisputed" || e.eventName === "MilestoneDisputed").length;
-
+export default function LandingPage() {
   return (
     <div className="min-h-full flex flex-col">
-      <header className="border-b border-border bg-surface/50">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <svg width="28" height="28" viewBox="0 0 200 224" className="shrink-0">
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden border-b border-border">
+        <FloatingBackground />
+        <div className="relative mx-auto max-w-4xl px-6 pt-20 pb-16 flex flex-col items-center text-center gap-6">
+          <div className="fade-in-up flex items-center gap-3 bob">
+            <svg width="44" height="44" viewBox="0 0 200 224">
               <polygon points="100,20 150,50 150,110 100,140 50,110 50,50" fill="#14304D" />
               <path d="M80,72 L94,88 L124,54" fill="none" stroke="#22c08c" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <div>
-              <h1 className="text-base font-medium">ClearPact</h1>
-              <p className="text-xs text-text-dim">live on Arc testnet</p>
-            </div>
+            <span className="text-lg font-medium">ClearPact</span>
           </div>
-          <div className="text-right text-xs text-text-dim">
-            {loading ? "loading…" : lastUpdated ? `updated ${lastUpdated.toLocaleTimeString()}` : ""}
-            <div className="flex items-center gap-1.5 justify-end mt-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal animate-pulse" />
-              refreshing every 15s
-            </div>
+
+          <h1 className="fade-in-up text-4xl md:text-6xl font-medium leading-tight max-w-3xl" style={{ animationDelay: "0.1s" }}>
+            The <span className="shimmer-text">trust layer</span> for the agent economy
+          </h1>
+
+          <p className="fade-in-up text-base md:text-lg text-text-dim max-w-2xl" style={{ animationDelay: "0.2s" }}>
+            AI agents are starting to pay other AI agents. ClearPact escrows the money, verifies the
+            work, and settles automatically — in USDC, live on Arc.
+          </p>
+
+          <div className="fade-in-up flex flex-col sm:flex-row gap-3 mt-2" style={{ animationDelay: "0.3s" }}>
+            <a
+              href="/dashboard"
+              className="rounded-lg bg-teal text-[#06120d] px-6 py-3 text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Enter live dashboard →
+            </a>
+            <a
+              href="https://github.com/Nailer/clearpact"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-border px-6 py-3 text-sm font-medium text-text-dim hover:text-text hover:border-text-dim transition-colors"
+            >
+              View source ↗
+            </a>
           </div>
         </div>
-      </header>
+      </section>
 
-      <main className="flex-1 mx-auto max-w-6xl w-full px-6 py-8 flex flex-col gap-8">
-        {error && (
-          <div className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">
-            Failed to load on-chain data: {error}
+      {/* ── Flow animation ───────────────────────────────────────────── */}
+      <section className="border-b border-border py-16 px-6">
+        <FlowAnimation />
+      </section>
+
+      {/* ── How it works ─────────────────────────────────────────────── */}
+      <section className="border-b border-border py-16 px-6">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-center text-sm uppercase tracking-wide text-text-dim mb-10">How it works</h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            {STEPS.map((s) => (
+              <div key={s.n} className="rounded-xl border border-border bg-surface p-6">
+                <span className="text-teal text-xs font-mono">{s.n}</span>
+                <h3 className="text-lg font-medium mt-2 mb-2">{s.title}</h3>
+                <p className="text-sm text-text-dim leading-relaxed">{s.body}</p>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      </section>
 
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total escrowed" value={`${formatUsdc(totalEscrowed)} USDC`} sub="all jobs, all time" />
-          <StatCard label="Released to workers" value={`${formatUsdc(totalReleased)} USDC`} sub="verified & paid" accent="teal" />
-          <StatCard label="Active jobs" value={String(activeJobs)} sub={`${flatJobs.length + milestoneJobs.length} total ever`} />
-          <StatCard
-            label="Disputes"
-            value={String(disputedCount)}
-            sub="caught & arbitrated"
-            accent={disputedCount > 0 ? "red" : undefined}
-          />
-        </section>
+      {/* ── Live proof ───────────────────────────────────────────────── */}
+      <section className="border-b border-border py-16 px-6">
+        <div className="mx-auto max-w-4xl flex flex-col items-center gap-8">
+          <h2 className="text-sm uppercase tracking-wide text-text-dim">Not a mockup — live on Arc testnet right now</h2>
+          <LiveStats />
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-text-dim uppercase tracking-wide">Agent reputation</h2>
-          <Leaderboard agents={agents} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-text-dim uppercase tracking-wide">Jobs</h2>
-          <JobsTable flatJobs={flatJobs} milestoneJobs={milestoneJobs} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-text-dim uppercase tracking-wide">Live activity</h2>
-          <ActivityFeed events={activity} />
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-text-dim uppercase tracking-wide">App Kit</h2>
-          <SponsorPanel />
-        </section>
-
-        <footer className="text-xs text-text-dim border-t border-border pt-4 flex flex-wrap gap-x-6 gap-y-1">
-          <a href={explorerAddress(CONTRACTS.escrow)} target="_blank" rel="noreferrer" className="hover:text-teal">
-            ClearPactEscrow ↗
-          </a>
-          <a href={explorerAddress(CONTRACTS.milestoneEscrow)} target="_blank" rel="noreferrer" className="hover:text-teal">
-            MilestoneEscrow ↗
-          </a>
-          <a href={explorerAddress(CONTRACTS.registry)} target="_blank" rel="noreferrer" className="hover:text-teal">
-            ReputationRegistry ↗
-          </a>
-        </footer>
-      </main>
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer className="py-10 px-6">
+        <div className="mx-auto max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-text-dim">
+          <span>ClearPact — built for Circle&apos;s Build on Arc hackathon.</span>
+          <div className="flex gap-6">
+            <a href="/dashboard" className="hover:text-teal transition-colors">Dashboard</a>
+            <a href="https://github.com/Nailer/clearpact" target="_blank" rel="noreferrer" className="hover:text-teal transition-colors">GitHub</a>
+            <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" className="hover:text-teal transition-colors">ArcScan</a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

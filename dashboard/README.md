@@ -1,7 +1,11 @@
 # ClearPact dashboard
 
-Live, read-only view of ClearPact's on-chain state on Arc testnet — escrows, milestone/streaming jobs,
-agent reputation, and a real-time activity feed — plus a Circle App Kit "sponsor an agent" panel.
+`/` — an animated landing page (pure CSS/SVG, no animation library) pitching the product and
+pulling real live numbers off Arc testnet.
+
+`/dashboard` — live, read-only view of ClearPact's on-chain state: escrows, milestone/streaming
+jobs, agent reputation, and a real-time activity feed — plus a Circle App Kit "sponsor an agent"
+panel.
 
 ## Run it
 

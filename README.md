@@ -58,9 +58,9 @@ Every method has been run live against the real Arc testnet deployment, not just
 
 ## Dashboard
 
-Live, read-only view of every escrow, milestone job, and agent reputation — polled directly from
-Arc testnet in the browser, no backend, no indexer — plus a real Circle App Kit "sponsor an agent"
-panel.
+An animated landing page at `/`, then `/dashboard` — a live, read-only view of every escrow,
+milestone job, and agent reputation, polled directly from Arc testnet in the browser, no backend,
+no indexer — plus a real Circle App Kit "sponsor an agent" panel.
 
 ```bash
 cd dashboard && npm install && npm run dev

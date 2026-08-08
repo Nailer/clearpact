@@ -244,3 +244,19 @@ A fresh, zero-balance Circle wallet (never touched before this run) was hired, f
 **Examples:** [`sdk/examples/basic-escrow.ts`](../sdk/examples/basic-escrow.ts) and [`sdk/examples/milestone-job.ts`](../sdk/examples/milestone-job.ts), both typechecked against the real published types (`tsconfig.examples.json`), not just prose in a README.
 
 **Not yet done:** publish to the npm registry (needs an npm account — GM task, optional; the package installs fine directly from the repo in the meantime). Video, deck, and final platform submission still open.
+
+---
+
+## Part 6b — Animated landing page (6 Aug 2026)
+
+**Objective:** the dashboard was a strong live-data view but dropped visitors straight into tables — no pitch, no hook. Added a proper landing page in front of it.
+
+**`dashboard/src/app/page.tsx`** — the new `/`, with the live dashboard moved to `/dashboard`:
+- Hero with a drifting-hexagon background (echoing the logo mark), a shimmer-text headline, and entrance animations — all pure CSS `@keyframes`, no animation library, so it costs nothing in bundle size.
+- **`FlowAnimation`** — the core product mechanic animated as SVG, not prose: USDC tokens flow from a Buyer node into an Escrow (hexagon) node, a Verifier node above pulses a checkmark, and tokens continue on to a Worker node — using SVG SMIL `<animateMotion>` along `<path>` elements rather than CSS `offset-path` (more consistent cross-browser support, no JS animation loop needed).
+- **`LiveStats`** — a count-up-animated proof strip (USDC escrowed, jobs settled, agents with a credit score, top reputation) pulling genuinely live numbers from the same `fetchFlatJobs`/`fetchMilestoneJobs`/`fetchAgents` used by the dashboard — the landing page backs up its own pitch with real on-chain data on load, not static claims.
+- All animations respect `prefers-reduced-motion`.
+
+**Gotcha:** moving `page.tsx` between route folders (`/` → `/dashboard`) is a structural change Next.js's dev-server hot-reload doesn't always pick up cleanly — needed a full dev-server restart (not just a file save) before the new route tree took effect. Documented since it looks like the change silently failed otherwise.
+
+**Verified live** in a real browser session: hero animations firing correctly, verifier checkmark pulsing on schedule, live stats strip pulling and animating in the real numbers (3.09 USDC escrowed, 13 jobs, 6 agents, 100/100 top reputation at verification time), and both `/` and `/dashboard` routes rendering correctly with no console errors.
